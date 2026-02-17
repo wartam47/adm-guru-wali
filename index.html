@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Administrasi Guru Wali Digital</title>
+    
+    <!-- External Libraries (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind Configuration -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        navy: { 900: '#0f172a', 800: '#1e293b', 700: '#334155', 50: '#f8fafc' },
+                        primary: { DEFAULT: '#3b82f6', hover: '#2563eb', light: '#eff6ff' }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Custom CSS -->
+    <style>
+        /* Chart Container Styling as per requirements */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 100%;
+            height: 300px; /* Default height */
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        @media (min-width: 768px) {
+            .chart-container { height: 350px; }
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-navy-50 text-slate-800 antialiased overflow-hidden h-screen flex flex-col">
+
+    <!-- Chosen Palette: Navy Blue (Professional/Trust) & White with Blue Accents -->
+    
+    <!-- Application Structure Plan: 
+         1. Authentication Layer: A simple overlay to protect the view.
+         2. Layout: Responsive Sidebar (Left) + Main Content Area (Right).
+         3. Navigation: Functional buttons corresponding to the 8 Google Sheet tabs.
+         4. Dashboard: A visual overview using Chart.js to summarize data (Attendance/Status).
+         5. Dynamic Engine: A single JS logic block that renders Forms and Tables based on configuration, 
+            eliminating the need to write HTML for each menu manually.
+    -->
+
+    <!-- 1. LOGIN OVERLAY -->
+    <div id="loginOverlay" class="fixed inset-0 bg-navy-900 z-[100] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
+            <div class="w-20 h-20 bg-primary-light rounded-full flex items-center justify-center mx-auto mb-6 text-primary text-3xl">
+                <i class="fas fa-shield-alt"></i>
+            </div>
+            <h1 class="text-2xl font-bold text-navy-900 mb-2">Portal Guru Wali</h1>
+            <p class="text-slate-500 text-sm mb-6">Silakan masukkan kode akses untuk melanjutkan.</p>
+            
+            <form onsubmit="app.login(event)">
+                <input type="password" id="accessCode" 
+                    class="w-full px-4 py-3 border border-slate-300 rounded-lg text-center text-lg tracking-widest focus:ring-2 focus:ring-primary focus:border-transparent outline-none mb-4 transition-all"
+                    placeholder="••••••" autofocus>
+                <button type="submit" 
+                    class="w-full bg-navy-900 hover:bg-navy-800 text-white font-semibold py-3 rounded-lg shadow-lg transition-transform active:scale-95">
+                    Masuk Dashboard
+                </button>
+            </form>
+            <p id="loginError" class="text-red-500 text-xs mt-4 hidden flex items-center justify-center gap-1">
+                <i class="fas fa-exclamation-circle"></i> Kode akses tidak valid.
+            </p>
+        </div>
+    </div>
+
+    <!-- 2. MAIN APPLICATION LAYOUT -->
+    <div id="appContainer" class="flex-1 flex overflow-hidden opacity-0 transition-opacity duration-700">
+        
+        <!-- SIDEBAR NAVIGATION -->
+        <aside id="sidebar" class="bg-navy-900 text-slate-300 w-72 flex-shrink-0 flex flex-col fixed md:relative h-full z-50 transform -translate-x-full md:translate-x-0 transition-transform duration-300 shadow-xl">
+            <div class="p-6 border-b border-navy-800 flex items-center justify-between">
+                <div>
+                    <h2 class="text-white font-bold text-lg tracking-tight">ADM GURU WALI</h2>
+                    <p class="text-[10px] text-primary font-bold uppercase tracking-widest">Digital System v1.0</p>
+                </div>
+                <button onclick="app.toggleSidebar()" class="md:hidden text-slate-400 hover:text-white">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <nav id="navLinks" class="flex-1 overflow-y-auto p-4 space-y-1">
+                <!-- Nav items injected by JS -->
+            </nav>
+
+            <div class="p-4 border-t border-navy-800">
+                <div class="bg-navy-800 rounded-lg p-3 flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-xs">GW</div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-white text-sm font-medium truncate">Guru Wali Kelas</p>
+                        <p class="text-xs text-green-400 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-green-400"></span> Online</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main class="flex-1 flex flex-col min-w-0 bg-navy-50 relative">
+            
+            <!-- HEADER -->
+            <header class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-4 md:px-8 shadow-sm z-40">
+                <div class="flex items-center gap-4">
+                    <button onclick="app.toggleSidebar()" class="md:hidden text-navy-900 text-xl focus:outline-none">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h2 id="pageTitle" class="text-lg font-bold text-navy-900 flex items-center gap-2">
+                        <i class="fas fa-chart-pie text-primary"></i> Dashboard
+                    </h2>
+                </div>
+                <div class="flex items-center gap-4">
+                    <button onclick="app.logout()" class="text-slate-500 hover:text-red-600 text-sm font-medium transition-colors flex items-center gap-2">
+                        <span>Keluar</span> <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- SCROLLABLE CONTENT AREA -->
+            <div id="contentArea" class="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
+                <!-- Dynamic Content Injected Here -->
+            </div>
+        </main>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // <!-- Visualization & Content Choices:
+        //      - Dashboard: Uses Chart.js for quick insights (Attendance & Activity).
+        //      - Forms: Auto-generated inputs based on the 'CONFIG.MENUS' array to match Google Sheets headers exactly.
+        //      - Tables: Responsive HTML tables with refreshing capabilities.
+        //      - Interaction: Fetch API used for GET (Data) and POST (Saving) to Google Apps Script. 
+        // -->
+
+        // --- CONFIGURATION ---
+        const CONFIG = {
+            API_URL: "https://script.google.com/macros/s/AKfycbwVVZywLqKd5zH0x4NwHJ3g2UDONJzDi2SVmd-3b1YjjmG8_Vxhqh1dHtVRaNwdUCdW/exec", // [PENTING] Masukkan URL Web App Google Apps Script di sini
+            SECRET_CODE: "guru123", // Kode akses login
+            MENUS: [
+                { id: 'dashboard', label: 'Dashboard Utama', icon: 'fa-chart-pie', type: 'dashboard' },
+                { id: 'identitas', label: 'Isi Identitas', icon: 'fa-id-card', fields: ['Nama', 'NIP', 'Kelas Perwalian', 'Tahun Pelajaran'] },
+                { id: 'program', label: 'Program Kerja', icon: 'fa-tasks', fields: ['No', 'Nama Kegiatan', 'Tujuan Sasaran', 'Waktu Pelaksanaan', 'Keterangan'] },
+                { id: 'jadwal', label: 'Jadwal Kegiatan', icon: 'fa-calendar-alt', fields: ['No', 'Nama Kegiatan', 'Tanggal Pelaksanaan', 'Lokasi', 'Keterangan'] },
+                { id: 'data-murid', label: 'Data Murid', icon: 'fa-users', fields: ['No', 'Nama Siswa', 'NISN', 'Jenis Kelamin', 'Keterangan'] },
+                { id: 'profil-murid', label: 'Profil Murid', icon: 'fa-user-graduate', fields: ['Nama Siswa', 'TTL', 'Alamat Lengkap', 'Ortu', 'HP Ortu'] },
+                { id: 'jurnal', label: 'Jurnal Pertemuan', icon: 'fa-book', fields: ['Tanggal', 'Nama Siswa', 'Kejadian', 'Tindak Lanjut', 'Status'] },
+                { id: 'laporan', label: 'Laporan Perkembangan', icon: 'fa-chart-line', fields: ['Nama Siswa', 'Nilai Rata Rata', 'Absensi', 'Catatan Perkembangan'] },
+                { id: 'rencana', label: 'Rencana Peng. Diri', icon: 'fa-lightbulb', fields: ['Tanggal', 'Kompetensi Target', 'Rencana Aksi', 'Hasil Capaian'] }
+            ]
+        };
+
+        // --- APPLICATION STATE & METHODS ---
+        const app = {
+            chartInstances: {}, // Store chart instances to destroy them before re-rendering
+
+            init: () => {
+                if (sessionStorage.getItem('isLoggedIn')) {
+                    app.showApp();
+                }
+                app.renderSidebar();
+            },
+
+            login: (e) => {
+                e.preventDefault();
+                const code = document.getElementById('accessCode').value;
+                if (code === CONFIG.SECRET_CODE) {
+                    sessionStorage.setItem('isLoggedIn', 'true');
+                    app.showApp();
+                } else {
+                    const err = document.getElementById('loginError');
+                    err.classList.remove('hidden');
+                    err.classList.add('shake');
+                    setTimeout(() => err.classList.remove('shake'), 500);
+                }
+            },
+
+            logout: () => {
+                sessionStorage.removeItem('isLoggedIn');
+                window.location.reload();
+            },
+
+            showApp: () => {
+                document.getElementById('loginOverlay').classList.add('hidden');
+                document.getElementById('appContainer').classList.remove('opacity-0');
+                app.navigate('dashboard');
+            },
+
+            toggleSidebar: () => {
+                const sidebar = document.getElementById('sidebar');
+                sidebar.classList.toggle('-translate-x-full');
+            },
+
+            renderSidebar: () => {
+                const container = document.getElementById('navLinks');
+                container.innerHTML = CONFIG.MENUS.map(menu => `
+                    <button onclick="app.navigate('${menu.id}')" id="nav-${menu.id}" 
+                        class="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 text-slate-400 hover:text-white hover:bg-navy-800 group">
+                        <i class="fas ${menu.icon} w-5 text-center transition-colors group-hover:text-primary"></i>
+                        <span>${menu.label}</span>
+                    </button>
+                `).join('');
+            },
+
+            navigate: (menuId) => {
+                // Update Sidebar Active State
+                document.querySelectorAll('#navLinks button').forEach(btn => {
+                    btn.classList.remove('bg-primary', 'text-white', 'shadow-md');
+                    btn.classList.add('text-slate-400');
+                });
+                const activeBtn = document.getElementById(`nav-${menuId}`);
+                if (activeBtn) {
+                    activeBtn.classList.remove('text-slate-400');
+                    activeBtn.classList.add('bg-primary', 'text-white', 'shadow-md');
+                }
+
+                // Close sidebar on mobile
+                if (window.innerWidth < 768) {
+                    document.getElementById('sidebar').classList.add('-translate-x-full');
+                }
+
+                const menu = CONFIG.MENUS.find(m => m.id === menuId);
+                document.getElementById('pageTitle').innerHTML = `<i class="fas ${menu.icon} text-primary"></i> ${menu.label}`;
+                
+                const contentArea = document.getElementById('contentArea');
+                contentArea.innerHTML = ''; // Clear content
+                
+                if (menu.type === 'dashboard') {
+                    app.renderDashboard(contentArea);
+                } else {
+                    app.renderFormPage(contentArea, menu);
+                }
+            },
+
+            // --- DASHBOARD RENDERER ---
+            renderDashboard: (container) => {
+                container.innerHTML = `
+                    <div class="fade-in space-y-6">
+                        <div class="bg-blue-50 border-l-4 border-primary p-4 rounded-r-lg mb-6">
+                            <p class="text-sm text-blue-800">
+                                <strong>Selamat Datang, Bapak/Ibu Wali Kelas.</strong> 
+                                Di bawah ini adalah ringkasan aktivitas dan status data administrasi kelas Anda.
+                            </p>
+                        </div>
+
+                        <!-- Metric Cards -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            ${app.createMetricCard('Total Siswa', '32', 'Siswa Terdaftar', 'fa-users', 'bg-blue-500')}
+                            ${app.createMetricCard('Jurnal Bulan Ini', '12', 'Catatan Kejadian', 'fa-book-open', 'bg-purple-500')}
+                            ${app.createMetricCard('Program Kerja', '85%', 'Terlaksana', 'fa-tasks', 'bg-green-500')}
+                            ${app.createMetricCard('Laporan', 'Aktif', 'Status Data', 'fa-check-circle', 'bg-orange-500')}
+                        </div>
+
+                        <!-- Charts Section -->
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                                <h3 class="font-bold text-navy-900 mb-4 border-b pb-2">Persentase Kehadiran (Demo)</h3>
+                                <div class="chart-container">
+                                    <canvas id="attendanceChart"></canvas>
+                                </div>
+                            </div>
+                            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                                <h3 class="font-bold text-navy-900 mb-4 border-b pb-2">Aktivitas Jurnal (Demo)</h3>
+                                <div class="chart-container">
+                                    <canvas id="activityChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Render Charts
+                setTimeout(() => {
+                    app.renderCharts();
+                }, 100);
+            },
+
+            createMetricCard: (title, value, subtitle, icon, colorClass) => {
+                return `
+                    <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-100 flex items-start justify-between hover:shadow-md transition-shadow">
+                        <div>
+                            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">${title}</p>
+                            <h3 class="text-2xl font-bold text-navy-900 mt-1">${value}</h3>
+                            <p class="text-xs text-slate-500 mt-1">${subtitle}</p>
+                        </div>
+                        <div class="w-10 h-10 rounded-lg ${colorClass} text-white flex items-center justify-center shadow-lg shadow-${colorClass}/30">
+                            <i class="fas ${icon}"></i>
+                        </div>
+                    </div>
+                `;
+            },
+
+            renderCharts: () => {
+                // Destroy old instances if they exist
+                if (app.chartInstances.attendance) app.chartInstances.attendance.destroy();
+                if (app.chartInstances.activity) app.chartInstances.activity.destroy();
+
+                const ctx1 = document.getElementById('attendanceChart').getContext('2d');
+                app.chartInstances.attendance = new Chart(ctx1, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Hadir', 'Sakit', 'Izin', 'Alpha'],
+                        datasets: [{
+                            data: [85, 5, 8, 2],
+                            backgroundColor: ['#3b82f6', '#f59e0b', '#10b981', '#ef4444'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                });
+
+                const ctx2 = document.getElementById('activityChart').getContext('2d');
+                app.chartInstances.activity = new Chart(ctx2, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum'],
+                        datasets: [{
+                            label: 'Masalah Tercatat',
+                            data: [2, 1, 4, 2, 3],
+                            backgroundColor: '#6366f1',
+                            borderRadius: 4
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                });
+            },
+
+            // --- FORM & TABLE PAGE RENDERER ---
+            renderFormPage: (container, menu) => {
+                const inputs = menu.fields.map(field => {
+                    const id = field.toLowerCase().replace(/\s/g, '_');
+                    const isDate = field.includes('Tanggal') || field === 'Waktu Pelaksanaan';
+                    const isNumber = field.includes('No') || field.includes('Nilai') || field.includes('Absensi');
+                    const type = isDate ? 'date' : (isNumber ? 'number' : 'text');
+                    
+                    return `
+                        <div class="col-span-1">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wide">${field}</label>
+                            <input type="${type}" name="${id}" required 
+                                class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm transition-shadow">
+                        </div>
+                    `;
+                }).join('');
+
+                container.innerHTML = `
+                    <div class="fade-in max-w-5xl mx-auto">
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden mb-8">
+                            <div class="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div>
+                                    <h3 class="font-bold text-navy-900 text-lg">Input ${menu.label}</h3>
+                                    <p class="text-sm text-slate-500">Isi formulir di bawah ini untuk menyimpan data baru ke database.</p>
+                                </div>
+                                <button onclick="app.fetchData('${menu.label}')" 
+                                    class="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-600 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                                    <i class="fas fa-sync-alt"></i> Lihat Tabel Data
+                                </button>
+                            </div>
+                            
+                            <form onsubmit="app.saveData(event, '${menu.label}')" class="p-6">
+                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    ${inputs}
+                                </div>
+                                <div class="mt-8 flex justify-end">
+                                    <button type="submit" class="bg-navy-900 hover:bg-navy-800 text-white px-8 py-2.5 rounded-lg font-bold shadow-lg transition-transform active:scale-95 flex items-center gap-2">
+                                        <i class="fas fa-save"></i> Simpan Data
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Data Table Container -->
+                        <div id="tableContainer" class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden min-h-[200px]">
+                            <div class="flex flex-col items-center justify-center h-48 text-slate-400">
+                                <i class="fas fa-table text-4xl mb-3 opacity-20"></i>
+                                <p class="text-sm">Klik tombol "Lihat Tabel Data" untuk memuat data.</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            },
+
+            // --- API: SAVE DATA ---
+            saveData: async (e, sheet) => {
+                e.preventDefault();
+                if (!CONFIG.API_URL) return alert("PENTING: Masukkan API_URL di dalam kode index.html baris 136 terlebih dahulu!");
+
+                const btn = e.target.querySelector('button[type="submit"]');
+                const originalContent = btn.innerHTML;
+                
+                const formData = new FormData(e.target);
+                const payload = {};
+                formData.forEach((value, key) => payload[key] = value);
+
+                btn.disabled = true;
+                btn.innerHTML = `<i class="fas fa-circle-notch fa-spin"></i> Menyimpan...`;
+
+                try {
+                    await fetch(CONFIG.API_URL, {
+                        method: 'POST',
+                        mode: 'no-cors', // Mode no-cors diperlukan untuk Google Apps Script Web App
+                        body: JSON.stringify({ targetSheet: sheet, payload: payload })
+                    });
+                    
+                    alert(`Sukses! Data telah disimpan ke menu ${sheet}.`);
+                    e.target.reset();
+                    // Auto fetch data after save
+                    setTimeout(() => app.fetchData(sheet), 1000);
+
+                } catch (err) {
+                    alert("Gagal terhubung ke server. Periksa koneksi internet Anda.");
+                    console.error(err);
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = originalContent;
+                }
+            },
+
+            // --- API: FETCH DATA ---
+            fetchData: async (sheet) => {
+                const container = document.getElementById('tableContainer');
+                container.innerHTML = `
+                    <div class="flex flex-col items-center justify-center h-48 text-primary animate-pulse">
+                        <i class="fas fa-circle-notch fa-spin text-3xl mb-3"></i>
+                        <p class="text-sm font-medium">Sedang menyinkronkan data...</p>
+                    </div>
+                `;
+
+                if (!CONFIG.API_URL) {
+                    container.innerHTML = `<div class="p-8 text-center text-red-500">API URL belum dikonfigurasi.</div>`;
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${CONFIG.API_URL}?menu=${encodeURIComponent(sheet)}`);
+                    const data = await response.json();
+
+                    if (!data || data.length === 0) {
+                        container.innerHTML = `
+                            <div class="flex flex-col items-center justify-center h-48 text-slate-400">
+                                <i class="far fa-folder-open text-3xl mb-3 opacity-30"></i>
+                                <p class="text-sm">Belum ada data pada sheet ini.</p>
+                            </div>`;
+                        return;
+                    }
+
+                    const headers = Object.keys(data[0]);
+                    
+                    container.innerHTML = `
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-200">
+                                        ${headers.map(h => `
+                                            <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                                                ${h.replace(/_/g, ' ')}
+                                            </th>
+                                        `).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    ${data.map(row => `
+                                        <tr class="hover:bg-blue-50/50 transition-colors">
+                                            ${headers.map(h => `
+                                                <td class="px-6 py-4 text-sm text-slate-600 whitespace-nowrap border-r border-transparent last:border-r-0">
+                                                    ${row[h] || '-'}
+                                                </td>
+                                            `).join('')}
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="px-6 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 text-right">
+                            Menampilkan ${data.length} data terbaru
+                        </div>
+                    `;
+
+                } catch (err) {
+                    container.innerHTML = `
+                        <div class="p-8 text-center text-red-500">
+                            <i class="fas fa-exclamation-triangle text-2xl mb-2"></i>
+                            <p>Gagal memuat data.</p>
+                            <p class="text-xs opacity-75">Pastikan URL API benar dan deployment diakses "Anyone".</p>
+                        </div>`;
+                }
+            }
+        };
+
+        // Initialize
+        window.onload = app.init;
+    </script>
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+</body>
+</html>
