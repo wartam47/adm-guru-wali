@@ -8,6 +8,10 @@
     <!-- External Libraries (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- jsPDF & AutoTable for PDF Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
@@ -28,12 +32,11 @@
 
     <!-- Custom CSS -->
     <style>
-        /* Chart Container Styling as per requirements */
         .chart-container {
             position: relative;
             width: 100%;
             max-width: 100%;
-            height: 300px; /* Default height */
+            height: 300px;
             margin-left: auto;
             margin-right: auto;
         }
@@ -42,7 +45,6 @@
             .chart-container { height: 350px; }
         }
 
-        /* Scrollbar Styling */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
@@ -50,20 +52,13 @@
 
         .fade-in { animation: fadeIn 0.5s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        @media print {
+            .no-print { display: none !important; }
+        }
     </style>
 </head>
 <body class="bg-navy-50 text-slate-800 antialiased overflow-hidden h-screen flex flex-col">
-
-    <!-- Chosen Palette: Navy Blue (Professional/Trust) & White with Blue Accents -->
-    
-    <!-- Application Structure Plan: 
-         1. Authentication Layer: A simple overlay to protect the view.
-         2. Layout: Responsive Sidebar (Left) + Main Content Area (Right).
-         3. Navigation: Functional buttons corresponding to the 8 Google Sheet tabs.
-         4. Dashboard: A visual overview using Chart.js to summarize data (Attendance/Status).
-         5. Dynamic Engine: A single JS logic block that renders Forms and Tables based on configuration, 
-            eliminating the need to write HTML for each menu manually.
-    -->
 
     <!-- 1. LOGIN OVERLAY -->
     <div id="loginOverlay" class="fixed inset-0 bg-navy-900 z-[100] flex items-center justify-center p-4">
@@ -122,7 +117,6 @@
         <!-- MAIN CONTENT -->
         <main class="flex-1 flex flex-col min-w-0 bg-navy-50 relative">
             
-            <!-- HEADER -->
             <header class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-4 md:px-8 shadow-sm z-40">
                 <div class="flex items-center gap-4">
                     <button onclick="app.toggleSidebar()" class="md:hidden text-navy-900 text-xl focus:outline-none">
@@ -139,7 +133,6 @@
                 </div>
             </header>
 
-            <!-- SCROLLABLE CONTENT AREA -->
             <div id="contentArea" class="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
                 <!-- Dynamic Content Injected Here -->
             </div>
@@ -148,17 +141,15 @@
 
     <!-- JAVASCRIPT LOGIC -->
     <script>
-        // <!-- Visualization & Content Choices:
-        //      - Dashboard: Uses Chart.js for quick insights (Attendance & Activity).
-        //      - Forms: Auto-generated inputs based on the 'CONFIG.MENUS' array to match Google Sheets headers exactly.
-        //      - Tables: Responsive HTML tables with refreshing capabilities.
-        //      - Interaction: Fetch API used for GET (Data) and POST (Saving) to Google Apps Script. 
+        // <!-- Chosen Palette: Navy & Professional Blue -->
+        // <!-- Application Structure Plan: 
+        //      - Integrated jsPDF to allow data exploration and physical archiving.
+        //      - Enhanced Table UI with download capability.
         // -->
 
-        // --- CONFIGURATION ---
         const CONFIG = {
-            API_URL: "https://script.google.com/macros/s/AKfycbwVVZywLqKd5zH0x4NwHJ3g2UDONJzDi2SVmd-3b1YjjmG8_Vxhqh1dHtVRaNwdUCdW/exec", // [PENTING] Masukkan URL Web App Google Apps Script di sini
-            SECRET_CODE: "guru123", // Kode akses login
+            API_URL: "https://script.google.com/macros/s/AKfycbwVVZywLqKd5zH0x4NwHJ3g2UDONJzDi2SVmd-3b1YjjmG8_Vxhqh1dHtVRaNwdUCdW/exec", 
+            SECRET_CODE: "guru123", 
             MENUS: [
                 { id: 'dashboard', label: 'Dashboard Utama', icon: 'fa-chart-pie', type: 'dashboard' },
                 { id: 'identitas', label: 'Isi Identitas', icon: 'fa-id-card', fields: ['Nama', 'NIP', 'Kelas Perwalian', 'Tahun Pelajaran'] },
@@ -172,14 +163,13 @@
             ]
         };
 
-        // --- APPLICATION STATE & METHODS ---
         const app = {
-            chartInstances: {}, // Store chart instances to destroy them before re-rendering
+            chartInstances: {}, 
+            currentActiveData: null,
+            currentActiveSheet: '',
 
             init: () => {
-                if (sessionStorage.getItem('isLoggedIn')) {
-                    app.showApp();
-                }
+                if (sessionStorage.getItem('isLoggedIn')) app.showApp();
                 app.renderSidebar();
             },
 
@@ -192,15 +182,10 @@
                 } else {
                     const err = document.getElementById('loginError');
                     err.classList.remove('hidden');
-                    err.classList.add('shake');
-                    setTimeout(() => err.classList.remove('shake'), 500);
                 }
             },
 
-            logout: () => {
-                sessionStorage.removeItem('isLoggedIn');
-                window.location.reload();
-            },
+            logout: () => { sessionStorage.removeItem('isLoggedIn'); window.location.reload(); },
 
             showApp: () => {
                 document.getElementById('loginOverlay').classList.add('hidden');
@@ -208,307 +193,204 @@
                 app.navigate('dashboard');
             },
 
-            toggleSidebar: () => {
-                const sidebar = document.getElementById('sidebar');
-                sidebar.classList.toggle('-translate-x-full');
-            },
+            toggleSidebar: () => document.getElementById('sidebar').classList.toggle('-translate-x-full'),
 
             renderSidebar: () => {
                 const container = document.getElementById('navLinks');
                 container.innerHTML = CONFIG.MENUS.map(menu => `
                     <button onclick="app.navigate('${menu.id}')" id="nav-${menu.id}" 
                         class="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 text-slate-400 hover:text-white hover:bg-navy-800 group">
-                        <i class="fas ${menu.icon} w-5 text-center transition-colors group-hover:text-primary"></i>
+                        <i class="fas ${menu.icon} w-5 text-center group-hover:text-primary"></i>
                         <span>${menu.label}</span>
                     </button>
                 `).join('');
             },
 
             navigate: (menuId) => {
-                // Update Sidebar Active State
                 document.querySelectorAll('#navLinks button').forEach(btn => {
                     btn.classList.remove('bg-primary', 'text-white', 'shadow-md');
                     btn.classList.add('text-slate-400');
                 });
                 const activeBtn = document.getElementById(`nav-${menuId}`);
-                if (activeBtn) {
-                    activeBtn.classList.remove('text-slate-400');
-                    activeBtn.classList.add('bg-primary', 'text-white', 'shadow-md');
-                }
+                if (activeBtn) activeBtn.classList.add('bg-primary', 'text-white', 'shadow-md');
 
-                // Close sidebar on mobile
-                if (window.innerWidth < 768) {
-                    document.getElementById('sidebar').classList.add('-translate-x-full');
-                }
+                if (window.innerWidth < 768) document.getElementById('sidebar').classList.add('-translate-x-full');
 
                 const menu = CONFIG.MENUS.find(m => m.id === menuId);
                 document.getElementById('pageTitle').innerHTML = `<i class="fas ${menu.icon} text-primary"></i> ${menu.label}`;
                 
                 const contentArea = document.getElementById('contentArea');
-                contentArea.innerHTML = ''; // Clear content
+                contentArea.innerHTML = ''; 
                 
-                if (menu.type === 'dashboard') {
-                    app.renderDashboard(contentArea);
-                } else {
-                    app.renderFormPage(contentArea, menu);
-                }
+                if (menu.type === 'dashboard') app.renderDashboard(contentArea);
+                else app.renderFormPage(contentArea, menu);
             },
 
-            // --- DASHBOARD RENDERER ---
             renderDashboard: (container) => {
                 container.innerHTML = `
                     <div class="fade-in space-y-6">
                         <div class="bg-blue-50 border-l-4 border-primary p-4 rounded-r-lg mb-6">
-                            <p class="text-sm text-blue-800">
-                                <strong>Selamat Datang, Bapak/Ibu Wali Kelas.</strong> 
-                                Di bawah ini adalah ringkasan aktivitas dan status data administrasi kelas Anda.
-                            </p>
+                            <p class="text-sm text-blue-800 font-medium">Dashboard ini merangkum seluruh administrasi perwalian Anda.</p>
                         </div>
-
-                        <!-- Metric Cards -->
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             ${app.createMetricCard('Total Siswa', '32', 'Siswa Terdaftar', 'fa-users', 'bg-blue-500')}
-                            ${app.createMetricCard('Jurnal Bulan Ini', '12', 'Catatan Kejadian', 'fa-book-open', 'bg-purple-500')}
-                            ${app.createMetricCard('Program Kerja', '85%', 'Terlaksana', 'fa-tasks', 'bg-green-500')}
-                            ${app.createMetricCard('Laporan', 'Aktif', 'Status Data', 'fa-check-circle', 'bg-orange-500')}
+                            ${app.createMetricCard('Jurnal', '12', 'Catatan Kejadian', 'fa-book-open', 'bg-purple-500')}
+                            ${app.createMetricCard('Progres', '85%', 'Program Terlaksana', 'fa-tasks', 'bg-green-500')}
+                            ${app.createMetricCard('Status', 'Siap', 'Laporan Semester', 'fa-check-circle', 'bg-orange-500')}
                         </div>
-
-                        <!-- Charts Section -->
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-                            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                                <h3 class="font-bold text-navy-900 mb-4 border-b pb-2">Persentase Kehadiran (Demo)</h3>
-                                <div class="chart-container">
-                                    <canvas id="attendanceChart"></canvas>
-                                </div>
-                            </div>
-                            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                                <h3 class="font-bold text-navy-900 mb-4 border-b pb-2">Aktivitas Jurnal (Demo)</h3>
-                                <div class="chart-container">
-                                    <canvas id="activityChart"></canvas>
-                                </div>
-                            </div>
+                            <div class="bg-white p-6 rounded-xl shadow-sm border"><div class="chart-container"><canvas id="attendanceChart"></canvas></div></div>
+                            <div class="bg-white p-6 rounded-xl shadow-sm border"><div class="chart-container"><canvas id="activityChart"></canvas></div></div>
                         </div>
                     </div>
                 `;
-
-                // Render Charts
-                setTimeout(() => {
-                    app.renderCharts();
-                }, 100);
+                setTimeout(() => app.renderCharts(), 100);
             },
 
-            createMetricCard: (title, value, subtitle, icon, colorClass) => {
-                return `
-                    <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-100 flex items-start justify-between hover:shadow-md transition-shadow">
-                        <div>
-                            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">${title}</p>
-                            <h3 class="text-2xl font-bold text-navy-900 mt-1">${value}</h3>
-                            <p class="text-xs text-slate-500 mt-1">${subtitle}</p>
-                        </div>
-                        <div class="w-10 h-10 rounded-lg ${colorClass} text-white flex items-center justify-center shadow-lg shadow-${colorClass}/30">
-                            <i class="fas ${icon}"></i>
-                        </div>
+            createMetricCard: (title, value, subtitle, icon, colorClass) => `
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-100 flex items-start justify-between">
+                    <div>
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">${title}</p>
+                        <h3 class="text-2xl font-bold text-navy-900 mt-1">${value}</h3>
+                        <p class="text-xs text-slate-500 mt-1">${subtitle}</p>
                     </div>
-                `;
-            },
+                    <div class="w-10 h-10 rounded-lg ${colorClass} text-white flex items-center justify-center shadow-lg shadow-${colorClass}/30"><i class="fas ${icon}"></i></div>
+                </div>`,
 
             renderCharts: () => {
-                // Destroy old instances if they exist
-                if (app.chartInstances.attendance) app.chartInstances.attendance.destroy();
-                if (app.chartInstances.activity) app.chartInstances.activity.destroy();
-
                 const ctx1 = document.getElementById('attendanceChart').getContext('2d');
-                app.chartInstances.attendance = new Chart(ctx1, {
+                new Chart(ctx1, {
                     type: 'doughnut',
-                    data: {
-                        labels: ['Hadir', 'Sakit', 'Izin', 'Alpha'],
-                        datasets: [{
-                            data: [85, 5, 8, 2],
-                            backgroundColor: ['#3b82f6', '#f59e0b', '#10b981', '#ef4444'],
-                            borderWidth: 0
-                        }]
-                    },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                    data: { labels: ['Hadir', 'Sakit', 'Izin', 'Alpha'], datasets: [{ data: [85, 5, 8, 2], backgroundColor: ['#3b82f6', '#f59e0b', '#10b981', '#ef4444'], borderWidth: 0 }] },
+                    options: { responsive: true, maintainAspectRatio: false }
                 });
 
                 const ctx2 = document.getElementById('activityChart').getContext('2d');
-                app.chartInstances.activity = new Chart(ctx2, {
+                new Chart(ctx2, {
                     type: 'bar',
-                    data: {
-                        labels: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum'],
-                        datasets: [{
-                            label: 'Masalah Tercatat',
-                            data: [2, 1, 4, 2, 3],
-                            backgroundColor: '#6366f1',
-                            borderRadius: 4
-                        }]
-                    },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                    data: { labels: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum'], datasets: [{ label: 'Kejadian', data: [2, 1, 4, 2, 3], backgroundColor: '#6366f1', borderRadius: 4 }] },
+                    options: { responsive: true, maintainAspectRatio: false }
                 });
             },
 
-            // --- FORM & TABLE PAGE RENDERER ---
             renderFormPage: (container, menu) => {
                 const inputs = menu.fields.map(field => {
                     const id = field.toLowerCase().replace(/\s/g, '_');
-                    const isDate = field.includes('Tanggal') || field === 'Waktu Pelaksanaan';
-                    const isNumber = field.includes('No') || field.includes('Nilai') || field.includes('Absensi');
-                    const type = isDate ? 'date' : (isNumber ? 'number' : 'text');
-                    
-                    return `
-                        <div class="col-span-1">
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wide">${field}</label>
-                            <input type="${type}" name="${id}" required 
-                                class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm transition-shadow">
-                        </div>
-                    `;
+                    const type = field.includes('Tanggal') ? 'date' : 'text';
+                    return `<div class="col-span-1">
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">${field}</label>
+                                <input type="${type}" name="${id}" required class="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm">
+                            </div>`;
                 }).join('');
 
                 container.innerHTML = `
                     <div class="fade-in max-w-5xl mx-auto">
-                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden mb-8">
-                            <div class="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                <div>
-                                    <h3 class="font-bold text-navy-900 text-lg">Input ${menu.label}</h3>
-                                    <p class="text-sm text-slate-500">Isi formulir di bawah ini untuk menyimpan data baru ke database.</p>
-                                </div>
-                                <button onclick="app.fetchData('${menu.label}')" 
-                                    class="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-600 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
-                                    <i class="fas fa-sync-alt"></i> Lihat Tabel Data
+                        <div class="bg-white rounded-xl shadow-sm border mb-8 overflow-hidden">
+                            <div class="p-6 border-b bg-slate-50/50 flex justify-between items-center">
+                                <h3 class="font-bold text-navy-900">Input ${menu.label}</h3>
+                                <button onclick="app.fetchData('${menu.label}')" class="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg text-sm font-medium flex items-center gap-2">
+                                    <i class="fas fa-sync-alt"></i> Tampilkan Data
                                 </button>
                             </div>
-                            
                             <form onsubmit="app.saveData(event, '${menu.label}')" class="p-6">
-                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    ${inputs}
-                                </div>
-                                <div class="mt-8 flex justify-end">
-                                    <button type="submit" class="bg-navy-900 hover:bg-navy-800 text-white px-8 py-2.5 rounded-lg font-bold shadow-lg transition-transform active:scale-95 flex items-center gap-2">
-                                        <i class="fas fa-save"></i> Simpan Data
-                                    </button>
-                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">${inputs}</div>
+                                <div class="mt-8 flex justify-end"><button type="submit" class="bg-navy-900 text-white px-8 py-2.5 rounded-lg font-bold shadow-lg flex items-center gap-2"><i class="fas fa-save"></i> Simpan</button></div>
                             </form>
                         </div>
-
-                        <!-- Data Table Container -->
-                        <div id="tableContainer" class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden min-h-[200px]">
-                            <div class="flex flex-col items-center justify-center h-48 text-slate-400">
-                                <i class="fas fa-table text-4xl mb-3 opacity-20"></i>
-                                <p class="text-sm">Klik tombol "Lihat Tabel Data" untuk memuat data.</p>
-                            </div>
+                        <div id="tableContainer" class="bg-white rounded-xl shadow-sm border min-h-[200px]">
+                            <div class="flex flex-col items-center justify-center h-48 text-slate-400 italic text-sm">Klik "Tampilkan Data" untuk memuat tabel.</div>
                         </div>
-                    </div>
-                `;
+                    </div>`;
             },
 
-            // --- API: SAVE DATA ---
             saveData: async (e, sheet) => {
                 e.preventDefault();
-                if (!CONFIG.API_URL) return alert("PENTING: Masukkan API_URL di dalam kode index.html baris 136 terlebih dahulu!");
-
                 const btn = e.target.querySelector('button[type="submit"]');
-                const originalContent = btn.innerHTML;
-                
                 const formData = new FormData(e.target);
                 const payload = {};
-                formData.forEach((value, key) => payload[key] = value);
+                formData.forEach((v, k) => payload[k] = v);
 
-                btn.disabled = true;
-                btn.innerHTML = `<i class="fas fa-circle-notch fa-spin"></i> Menyimpan...`;
-
+                btn.disabled = true; btn.innerText = "Menyimpan...";
                 try {
-                    await fetch(CONFIG.API_URL, {
-                        method: 'POST',
-                        mode: 'no-cors', // Mode no-cors diperlukan untuk Google Apps Script Web App
-                        body: JSON.stringify({ targetSheet: sheet, payload: payload })
-                    });
-                    
-                    alert(`Sukses! Data telah disimpan ke menu ${sheet}.`);
-                    e.target.reset();
-                    // Auto fetch data after save
-                    setTimeout(() => app.fetchData(sheet), 1000);
-
-                } catch (err) {
-                    alert("Gagal terhubung ke server. Periksa koneksi internet Anda.");
-                    console.error(err);
-                } finally {
-                    btn.disabled = false;
-                    btn.innerHTML = originalContent;
-                }
+                    await fetch(CONFIG.API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ targetSheet: sheet, payload: payload }) });
+                    alert("Data disimpan!"); e.target.reset(); app.fetchData(sheet);
+                } catch (err) { alert("Gagal koneksi."); }
+                finally { btn.disabled = false; btn.innerHTML = `<i class="fas fa-save"></i> Simpan`; }
             },
 
-            // --- API: FETCH DATA ---
             fetchData: async (sheet) => {
                 const container = document.getElementById('tableContainer');
-                container.innerHTML = `
-                    <div class="flex flex-col items-center justify-center h-48 text-primary animate-pulse">
-                        <i class="fas fa-circle-notch fa-spin text-3xl mb-3"></i>
-                        <p class="text-sm font-medium">Sedang menyinkronkan data...</p>
-                    </div>
-                `;
-
-                if (!CONFIG.API_URL) {
-                    container.innerHTML = `<div class="p-8 text-center text-red-500">API URL belum dikonfigurasi.</div>`;
-                    return;
-                }
-
+                container.innerHTML = `<div class="flex flex-col items-center justify-center h-48 text-primary animate-pulse"><i class="fas fa-circle-notch fa-spin text-3xl mb-3"></i><p class="text-sm">Menyinkronkan...</p></div>`;
+                
                 try {
                     const response = await fetch(`${CONFIG.API_URL}?menu=${encodeURIComponent(sheet)}`);
                     const data = await response.json();
+                    app.currentActiveData = data;
+                    app.currentActiveSheet = sheet;
 
                     if (!data || data.length === 0) {
-                        container.innerHTML = `
-                            <div class="flex flex-col items-center justify-center h-48 text-slate-400">
-                                <i class="far fa-folder-open text-3xl mb-3 opacity-30"></i>
-                                <p class="text-sm">Belum ada data pada sheet ini.</p>
-                            </div>`;
+                        container.innerHTML = `<div class="p-10 text-center text-slate-400 italic">Belum ada data.</div>`;
                         return;
                     }
 
                     const headers = Object.keys(data[0]);
-                    
                     container.innerHTML = `
+                        <div class="p-4 border-b bg-slate-50 flex justify-between items-center">
+                            <span class="text-xs font-bold text-slate-500 uppercase">Tabel: ${sheet}</span>
+                            <button onclick="app.exportPDF()" class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-bold flex items-center gap-2 shadow-md">
+                                <i class="fas fa-file-pdf"></i> Unduh PDF / Cetak
+                            </button>
+                        </div>
                         <div class="overflow-x-auto">
                             <table class="w-full text-left border-collapse">
                                 <thead>
-                                    <tr class="bg-slate-50 border-b border-slate-200">
-                                        ${headers.map(h => `
-                                            <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                                                ${h.replace(/_/g, ' ')}
-                                            </th>
-                                        `).join('')}
+                                    <tr class="bg-slate-100 border-b">
+                                        ${headers.map(h => `<th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">${h.replace(/_/g, ' ')}</th>`).join('')}
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-slate-100">
-                                    ${data.map(row => `
-                                        <tr class="hover:bg-blue-50/50 transition-colors">
-                                            ${headers.map(h => `
-                                                <td class="px-6 py-4 text-sm text-slate-600 whitespace-nowrap border-r border-transparent last:border-r-0">
-                                                    ${row[h] || '-'}
-                                                </td>
-                                            `).join('')}
-                                        </tr>
-                                    `).join('')}
+                                    ${data.map(row => `<tr class="hover:bg-blue-50/50">${headers.map(h => `<td class="px-6 py-4 text-sm text-slate-600">${row[h] || '-'}</td>`).join('')}</tr>`).join('')}
                                 </tbody>
                             </table>
-                        </div>
-                        <div class="px-6 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 text-right">
-                            Menampilkan ${data.length} data terbaru
-                        </div>
-                    `;
-
-                } catch (err) {
-                    container.innerHTML = `
-                        <div class="p-8 text-center text-red-500">
-                            <i class="fas fa-exclamation-triangle text-2xl mb-2"></i>
-                            <p>Gagal memuat data.</p>
-                            <p class="text-xs opacity-75">Pastikan URL API benar dan deployment diakses "Anyone".</p>
                         </div>`;
-                }
+                } catch (err) { container.innerHTML = `<div class="p-8 text-center text-red-500 text-sm italic">Gagal memuat data. Periksa URL API.</div>`; }
+            },
+
+            exportPDF: () => {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF('l', 'pt'); // Landscape, points
+                const data = app.currentActiveData;
+                const sheetName = app.currentActiveSheet;
+
+                if (!data || data.length === 0) return alert("Tidak ada data untuk diunduh.");
+
+                // PDF Header
+                doc.setFontSize(18);
+                doc.setTextColor(15, 23, 42); // Navy 900
+                doc.text(`LAPORAN ADMINISTRASI: ${sheetName.toUpperCase()}`, 40, 40);
+                
+                doc.setFontSize(10);
+                doc.setTextColor(100);
+                doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 40, 60);
+
+                const headers = Object.keys(data[0]).map(h => h.replace(/_/g, ' ').toUpperCase());
+                const body = data.map(obj => Object.values(obj));
+
+                doc.autoTable({
+                    head: [headers],
+                    body: body,
+                    startY: 80,
+                    theme: 'grid',
+                    styles: { fontSize: 8, cellPadding: 5 },
+                    headStyles: { fillStyle: 'f', fillColor: [15, 23, 42], textColor: 255 },
+                    alternateRowStyles: { fillColor: [248, 250, 252] },
+                    margin: { top: 80 }
+                });
+
+                doc.save(`Laporan_${sheetName.replace(/\s/g, '_')}_${new Date().getTime()}.pdf`);
             }
         };
 
-        // Initialize
         window.onload = app.init;
     </script>
     <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
